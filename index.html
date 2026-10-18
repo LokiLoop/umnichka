@@ -706,6 +706,52 @@ textarea {
   align-items: center;
   gap: 6px;
 }
+.finish-new-btn {
+  width: 100%;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 14px;
+  padding: 14px 18px;
+  background: #302a31;
+  color: #fff;
+  font-weight: 900;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 6px 18px rgba(48,42,49,.2);
+}
+.primary.ready-finish {
+  background: linear-gradient(135deg, #4c9b79, #3b8062);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(76,155,121,.35);
+}
+.report-preview-img {
+  width: 100%;
+  max-height: 52vh;
+  object-fit: contain;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #f7f4f0;
+  margin: 8px 0 12px;
+  box-shadow: 0 6px 20px rgba(63,45,35,.08);
+}
+.completed-sessions-badge {
+  display: none;
+  margin-top: 10px;
+  padding: 7px 11px;
+  border-radius: 12px;
+  background: #e6f5ec;
+  color: #28684b;
+  font-size: 12px;
+  font-weight: 800;
+  align-items: center;
+  justify-content: space-between;
+}
+.completed-sessions-badge.show {
+  display: flex;
+}
 
 .rest-modal {
   position: fixed;
@@ -1254,6 +1300,10 @@ textarea {
       <div class="stat"><b id="leftStat">30</b><span>осталось</span></div>
       <div class="stat"><b id="percentStat">0%</b><span>готово</span></div>
     </div>
+    <div class="completed-sessions-badge" id="completedSessionsBadge">
+      <span id="completedSessionsText">🏆 Завершено тренировок за день: 1</span>
+      <span>В дневнике ✓</span>
+    </div>
   </section>
 
   <div class="section-head">
@@ -1303,15 +1353,16 @@ textarea {
     <p>Ты справилась! Каждый подход — это вклад в твою силу и уверенность. Отдыхай, ты заслужила! 🌷</p>
     <div class="confetti">🐾 💕 🐾</div>
     <div class="finish-actions">
-      <button type="button" class="finish-tg-btn" id="sendReportBtn">✈️ Отправить отчёт в Telegram</button>
+      <button type="button" class="finish-tg-btn" id="sendReportBtn">🎨 Визуальный отчёт в Telegram</button>
       <button type="button" class="finish-copy-btn" id="finishCopyBtn">📋 Скопировать текст</button>
+      <button type="button" class="finish-new-btn" id="finishAndResetBtn">🎉 Завершить, сохранить в дневник и начать новую</button>
     </div>
     <div id="finishAnalysis"></div>
   </section>
 
   <div class="danger-zone">
-    <button class="share-tg-btn" id="shareAnytimeBtn" type="button">✈️ Поделиться отчётом в TG</button>
-    <button class="share-tg-btn" id="copyReportBtn" type="button">📋 Скопировать отчёт</button>
+    <button class="share-tg-btn" id="shareAnytimeBtn" type="button">🎨 Визуальный отчёт в TG</button>
+    <button class="share-tg-btn" id="finishEarlyBtn" type="button" style="background:#e6f5ec;border-color:#b8dec8;color:#28684b;">✅ Завершить и сохранить тренировку</button>
     <button class="reset-day-btn" id="resetBtn" type="button">🧹 Очистить отметки за день</button>
   </div>
 </main>
@@ -1386,6 +1437,25 @@ textarea {
     <div class="rest-actions-col">
       <button class="rest-continue" id="confirmYes" type="button" style="background:#c94a6a">Да, очистить этот день</button>
       <button class="rest-secondary" id="confirmNo" type="button">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно красивого визуального отчёта -->
+<div class="rest-modal" id="visualReportModal" role="dialog" aria-modal="true" aria-labelledby="visualReportTitle">
+  <div class="rest-dialog" style="width: min(100%, 420px);">
+    <button class="rest-close" id="visualReportClose" type="button" aria-label="Закрыть">×</button>
+    <div class="eyebrow">КРАСИВЫЙ ОТЧЁТ · УМНИЧКА</div>
+    <h2 id="visualReportTitle" style="margin:4px 0 4px;">Карточка тренировки 💕</h2>
+    <p style="font-size:12px;margin-bottom:6px;">Отправь визуальную карточку или текстовый отчёт прямо в чат Telegram:</p>
+    <img id="visualReportImg" class="report-preview-img" alt="Визуальный отчёт о тренировке">
+    <div class="rest-actions-col">
+      <button class="rest-continue" id="shareImageBtn" type="button" style="background:linear-gradient(135deg, #d66b94, #6558a5);">🖼 Поделиться картинкой в Telegram</button>
+      <button class="rest-continue" id="shareTelegramChatBtn" type="button" style="background:#302a31;">✈️ Выбрать чат в Telegram (текст)</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <button class="rest-secondary" id="downloadReportImgBtn" type="button">📥 Скачать постер</button>
+        <button class="rest-secondary" id="copyReportModalBtn" type="button">📋 Скопировать</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1610,8 +1680,12 @@ function mergeDayRecords(localDay, incomingDay) {
   if (!incomingDay) return localDay;
   const localTime = Number(localDay.updatedAt || 0);
   const incomingTime = Number(incomingDay.updatedAt || 0);
-  if (incomingTime > localTime) return incomingDay;
-  if (localTime > incomingTime) return localDay;
+  const history = (incomingDay.history?.length >= (localDay.history?.length || 0))
+    ? (incomingDay.history || [])
+    : (localDay.history || []);
+  const completedCount = Math.max(Number(localDay.completedCount || 0), Number(incomingDay.completedCount || 0), history.length);
+  if (incomingTime > localTime) return { ...incomingDay, history, completedCount };
+  if (localTime > incomingTime) return { ...localDay, history, completedCount };
   return {
     ...localDay,
     ...incomingDay,
@@ -1620,6 +1694,8 @@ function mergeDayRecords(localDay, incomingDay) {
     notes: incomingDay.notes || localDay.notes || '',
     restCycles: Math.max(Number(localDay.restCycles || 0), Number(incomingDay.restCycles || 0)),
     startedAt: Math.min(Number(localDay.startedAt || Date.now()), Number(incomingDay.startedAt || Date.now())),
+    history,
+    completedCount,
     updatedAt: localTime
   };
 }
@@ -1668,6 +1744,7 @@ function syncTelegramBackButton() {
     document.getElementById('pickerModal')?.classList.contains('show') ||
     document.getElementById('braidModal')?.classList.contains('show') ||
     document.getElementById('confirmModal')?.classList.contains('show') ||
+    document.getElementById('visualReportModal')?.classList.contains('show') ||
     document.getElementById('progressModal')?.classList.contains('show') ||
     isViewingPast;
 
@@ -1688,6 +1765,8 @@ if (tg && tg.BackButton) {
         closePicker();
       } else if (document.getElementById('braidModal')?.classList.contains('show')) {
         closeBraidModal();
+      } else if (document.getElementById('visualReportModal')?.classList.contains('show')) {
+        document.getElementById('visualReportModal')?.classList.remove('show');
       } else if (document.getElementById('confirmModal')?.classList.contains('show')) {
         document.getElementById('confirmModal')?.classList.remove('show');
       } else if (document.getElementById('progressModal')?.classList.contains('show')) {
@@ -1740,24 +1819,22 @@ if (wishCardEl) {
     showWish();
     toast('Новое пожелание на тренировку ✨');
   });
-}
-
-function isReadOnly() {
-  return isViewingPast && !allowPastEdit;
-}
-
-function hasAnyData(checkedObj, detailsObj, notesStr, rests) {
+function hasAnyData(checkedObj, detailsObj, notesStr, rests, historyArr) {
   const hasChecked = Object.values(checkedObj || {}).some(Boolean);
   const hasDetails = Object.values(detailsObj || {}).some(d => (d && (d.weight > 0 || d.reps > 0)));
   const hasNotes = Boolean((notesStr || '').trim());
-  return hasChecked || hasDetails || hasNotes || rests > 0;
+  const hasHistory = Array.isArray(historyArr) && historyArr.length > 0;
+  return hasChecked || hasDetails || hasNotes || rests > 0 || hasHistory;
 }
 
 function persist() {
   if (isReadOnly()) return;
   const notesEl = document.getElementById('notes');
   const notesVal = notesEl ? notesEl.value : '';
-  if (!hasAnyData(checked, setDetails, notesVal, restCycles) && !book.days[currentDate]) {
+  const existingHistory = session.history || book.days[currentDate]?.history || [];
+  const existingCompletedCount = session.completedCount || book.days[currentDate]?.completedCount || 0;
+
+  if (!hasAnyData(checked, setDetails, notesVal, restCycles, existingHistory) && !book.days[currentDate]) {
     return;
   }
   session = {
@@ -1767,6 +1844,8 @@ function persist() {
     notes: notesVal,
     restCycles,
     startedAt: workoutStartedAt,
+    history: existingHistory,
+    completedCount: existingCompletedCount,
     updatedAt: Date.now()
   };
   book.days[currentDate] = session;
@@ -1781,7 +1860,7 @@ function persist() {
       if (jsonStr.length <= 4000) {
         tg.CloudStorage.setItem(STORAGE_KEY, jsonStr);
       } else {
-        const recentDays = Object.keys(book.days).sort().slice(-15);
+        const recentDays = Object.keys(book.days).sort().slice(-12);
         const slimBook = { programStart: book.programStart, days: {} };
         recentDays.forEach(k => { slimBook.days[k] = book.days[k]; });
         tg.CloudStorage.setItem(STORAGE_KEY, JSON.stringify(slimBook));
@@ -2352,6 +2431,19 @@ function update() {
   const hudFillEl = document.getElementById('hudFill');
   if (hudFillEl) hudFillEl.style.width = (done / total * 100) + '%';
 
+  // Бейдж сохранённых в дневник тренировок за выбранный день
+  const completedBadge = document.getElementById('completedSessionsBadge');
+  const completedText = document.getElementById('completedSessionsText');
+  const completedCount = Number(session.completedCount || (session.history ? session.history.length : 0));
+  if (completedBadge && completedText) {
+    if (completedCount > 0) {
+      completedBadge.classList.add('show');
+      completedText.textContent = `🏆 Сохранено тренировок за день: ${completedCount}`;
+    } else {
+      completedBadge.classList.remove('show');
+    }
+  }
+
   const fin = document.getElementById('finish');
   const finishAnalysisEl = document.getElementById('finishAnalysis');
   if (done === total) {
@@ -2367,40 +2459,299 @@ function update() {
   const next = nextSet();
   const nextBtnMain = document.getElementById('nextBtn');
   if (nextBtnMain) {
-    nextBtnMain.textContent = next ? 'Следующий подход ↓' : 'Готово 🎉';
+    if (next) {
+      nextBtnMain.textContent = 'Следующий подход ↓';
+      nextBtnMain.classList.remove('ready-finish');
+    } else {
+      nextBtnMain.textContent = 'Готово 🎉 (Завершить)';
+      nextBtnMain.classList.add('ready-finish');
+    }
   }
 }
 
-// Формирование текстового отчёта для отправки в Telegram
+// Сбор данных для отчёта (из активной тренировки или последней сохранённой за день)
+function getActiveOrLastReportSource() {
+  const activeDone = exercises.reduce((n, e) => n + Array.from({ length: e.sets }, (_, i) => checked[e.id + '-' + i] ? 1 : 0).reduce((a, b) => a + b, 0), 0);
+  if (activeDone > 0) {
+    return {
+      checkedMap: checked,
+      detailsMap: setDetails,
+      notesVal: (document.getElementById('notes')?.value || '').trim(),
+      rests: restCycles,
+      durationSec: Math.max(60, Math.floor((Date.now() - workoutStartedAt) / 1000)),
+      doneCount: activeDone
+    };
+  }
+  const hist = session.history || [];
+  if (hist.length > 0) {
+    const last = hist[hist.length - 1];
+    return {
+      checkedMap: last.checked || {},
+      detailsMap: last.setDetails || {},
+      notesVal: last.notes || '',
+      rests: last.restCycles || 0,
+      durationSec: last.durationSec || 0,
+      doneCount: last.doneSets || total
+    };
+  }
+  return {
+    checkedMap: checked,
+    detailsMap: setDetails,
+    notesVal: (document.getElementById('notes')?.value || '').trim(),
+    rests: restCycles,
+    durationSec: 0,
+    doneCount: 0
+  };
+}
+
+// Формирование красивого текстового отчёта для отправки в Telegram
 function buildWorkoutReportText() {
-  const done = exercises.reduce((n, e) => n + Array.from({ length: e.sets }, (_, i) => checked[e.id + '-' + i] ? 1 : 0).reduce((a, b) => a + b, 0), 0);
-  const pct = Math.round(done / total * 100);
+  const src = getActiveOrLastReportSource();
+  const pct = Math.round(src.doneCount / total * 100);
+  let totalVolume = 0;
+  let totalReps = 0;
+
+  const exLines = [];
+  exercises.forEach(e => {
+    const setsArr = [];
+    for (let i = 0; i < e.sets; i++) {
+      const k = `${e.id}-${i}`;
+      if (src.checkedMap[k]) {
+        const det = src.detailsMap[k];
+        const w = det && det.weight ? parseFloat(det.weight) : 0;
+        const r = det && det.reps ? parseInt(det.reps, 10) : e.reps;
+        if (w > 0) totalVolume += w * r;
+        totalReps += r;
+        setsArr.push(w > 0 ? `${w}кг×${r}` : `${r}р`);
+      }
+    }
+    if (setsArr.length > 0) {
+      exLines.push(`🌸 ${e.name}: ${setsArr.join(', ')}`);
+    }
+  });
+
+  const dFormatted = new Date(currentDate + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  const durMin = src.durationSec > 0 ? Math.max(1, Math.round(src.durationSec / 60)) : 0;
+
   const lines = [
-    `💗 Тренировка Умнички (${currentDate})`,
-    `✅ Выполнено: ${done}/${total} подходов (${pct}%)`,
-    `⏱ Отдыхов: ${restCycles}`,
-    ''
+    `🎀 ТРЕНИРОВКА УМНИЧКИ · FULL BODY`,
+    `📅 Дата: ${dFormatted}`,
+    `✅ Выполнено: ${src.doneCount} из ${total} подходов (${pct}%)`,
+    `🏋️‍♀️ Тоннаж: ${Math.round(totalVolume)} кг · ${totalReps} повт.`,
+    `⏱ Время: ${durMin ? durMin + ' мин' : 'в процессе'} · Отдыхов: ${src.rests}`,
+    `━━━━━━━━━━━━━━━━━━`
   ];
+
+  if (exLines.length > 0) {
+    lines.push(...exLines);
+  } else {
+    lines.push('✨ Разминка и подготовка к подходам!');
+  }
+
+  if (src.notesVal) {
+    lines.push(`━━━━━━━━━━━━━━━━━━`, `📝 Заметка: ${src.notesVal}`);
+  }
+  return lines.join('\n');
+}
+
+function roundRectCanvas(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+let lastGeneratedBlob = null;
+let lastGeneratedDataUrl = null;
+
+// Генерация красивого визуального постера тренировки на Canvas
+async function generateVisualReportCard() {
+  const src = getActiveOrLastReportSource();
+  const pct = Math.round(src.doneCount / total * 100);
+  let totalVolume = 0;
+  let totalReps = 0;
+  const completedExercises = [];
 
   exercises.forEach(e => {
     const setsArr = [];
     for (let i = 0; i < e.sets; i++) {
       const k = `${e.id}-${i}`;
-      if (checked[k]) {
-        const det = setDetails[k];
-        setsArr.push(det && det.weight ? `${det.weight}кг×${det.reps}` : `${e.reps}р`);
+      if (src.checkedMap[k]) {
+        const det = src.detailsMap[k];
+        const w = det && det.weight ? parseFloat(det.weight) : 0;
+        const r = det && det.reps ? parseInt(det.reps, 10) : e.reps;
+        if (w > 0) totalVolume += w * r;
+        totalReps += r;
+        setsArr.push(w > 0 ? `${w}кг×${r}` : `${r}р`);
       }
     }
     if (setsArr.length > 0) {
-      lines.push(`• ${e.name}: ${setsArr.join(', ')}`);
+      completedExercises.push({ name: e.name, summary: setsArr.join(' · ') });
     }
   });
 
-  const notesVal = (document.getElementById('notes')?.value || '').trim();
-  if (notesVal) {
-    lines.push('', `📝 Заметка: ${notesVal}`);
+  const rowsCount = Math.max(1, completedExercises.length);
+  const notesHeight = src.notesVal ? 110 : 0;
+  const width = 1080;
+  const height = 680 + rowsCount * 76 + notesHeight + 130;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+
+  // Фон
+  const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+  bgGrad.addColorStop(0, '#fff0f5');
+  bgGrad.addColorStop(0.5, '#f4eeff');
+  bgGrad.addColorStop(1, '#eaf7ef');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, width, height);
+
+  // Декоративные круги
+  ctx.fillStyle = 'rgba(239, 143, 174, 0.14)';
+  ctx.beginPath(); ctx.arc(960, 140, 220, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(169, 155, 232, 0.14)';
+  ctx.beginPath(); ctx.arc(120, height - 180, 240, 0, Math.PI * 2); ctx.fill();
+
+  // Шапка карточки
+  roundRectCanvas(ctx, 48, 48, width - 96, 250, 42);
+  const heroGrad = ctx.createLinearGradient(48, 48, width - 48, 298);
+  heroGrad.addColorStop(0, '#ffdde8');
+  heroGrad.addColorStop(0.65, '#ece4ff');
+  heroGrad.addColorStop(1, '#e2f4e8');
+  ctx.fillStyle = heroGrad;
+  ctx.fill();
+
+  const dFormatted = new Date(currentDate + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  ctx.fillStyle = '#8d6e7c';
+  ctx.font = '800 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(`ДНЕВНИК ТРЕНИРОВОК · ${dFormatted.toUpperCase()}`, 92, 112);
+
+  ctx.fillStyle = '#282522';
+  ctx.font = '900 54px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Умничка · Full Body 💕', 92, 182);
+
+  // Прогресс-бар внутри шапки
+  roundRectCanvas(ctx, 92, 220, width - 184, 34, 17);
+  ctx.fillStyle = '#ffffffb8';
+  ctx.fill();
+
+  const fillW = Math.max(34, Math.round((width - 184) * (pct / 100)));
+  roundRectCanvas(ctx, 92, 220, fillW, 34, 17);
+  const barGrad = ctx.createLinearGradient(92, 220, 92 + fillW, 220);
+  barGrad.addColorStop(0, '#ef8fae');
+  barGrad.addColorStop(1, '#8c7bd2');
+  ctx.fillStyle = barGrad;
+  ctx.fill();
+
+  ctx.fillStyle = '#302a31';
+  ctx.font = '800 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(`${pct}% выполнено (${src.doneCount}/${total} подходов)`, 110, 245);
+
+  // 4 плитки статистики
+  const durMin = src.durationSec > 0 ? Math.max(1, Math.round(src.durationSec / 60)) : 1;
+  const stats = [
+    { label: 'ПОДХОДЫ', val: `${src.doneCount}/${total}` },
+    { label: 'ТОННАЖ', val: `${Math.round(totalVolume)} кг` },
+    { label: 'ПОВТОРЕНИЯ', val: `${totalReps}` },
+    { label: 'ВРЕМЯ / ОТДЫХ', val: `${durMin}м · ${src.rests} отд.` }
+  ];
+  const statW = (width - 96 - 36) / 4;
+  stats.forEach((st, idx) => {
+    const sx = 48 + idx * (statW + 12);
+    const sy = 324;
+    roundRectCanvas(ctx, sx, sy, statW, 130, 28);
+    ctx.fillStyle = '#fffdfa';
+    ctx.fill();
+    ctx.strokeStyle = '#eee7e0';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#817a73';
+    ctx.font = '800 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(st.label, sx + 22, sy + 46);
+
+    ctx.fillStyle = '#282522';
+    ctx.font = '900 32px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(st.val, sx + 22, sy + 96);
+  });
+
+  // Список выполненных упражнений
+  let curY = 484;
+  roundRectCanvas(ctx, 48, curY, width - 96, rowsCount * 76 + 86, 34);
+  ctx.fillStyle = '#fffdfa';
+  ctx.fill();
+  ctx.strokeStyle = '#eee7e0';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = '#9a7a86';
+  ctx.font = '900 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('ВЫПОЛНЕННЫЕ УПРАЖНЕНИЯ И ВЕСА', 84, curY + 50);
+
+  let rowY = curY + 95;
+  if (completedExercises.length === 0) {
+    ctx.fillStyle = '#817a73';
+    ctx.font = '700 26px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('Отметь выполненные подходы, чтобы они появились на карточке ✨', 84, rowY + 18);
+  } else {
+    completedExercises.forEach((item, idx) => {
+      if (idx > 0) {
+        ctx.strokeStyle = '#f2ece7';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(84, rowY - 26);
+        ctx.lineTo(width - 84, rowY - 26);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#4c9b79';
+      ctx.font = '900 26px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.fillText('✓', 84, rowY + 10);
+
+      ctx.fillStyle = '#282522';
+      ctx.font = '800 25px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const maxName = item.name.length > 34 ? item.name.slice(0, 34) + '…' : item.name;
+      ctx.fillText(maxName, 122, rowY + 10);
+
+      ctx.fillStyle = '#6558a5';
+      ctx.font = '800 23px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const sumText = item.summary.length > 32 ? item.summary.slice(0, 32) + '…' : item.summary;
+      const tw = ctx.measureText(sumText).width;
+      ctx.fillText(sumText, width - 84 - tw, rowY + 10);
+
+      rowY += 76;
+    });
   }
-  return lines.join('\n');
+
+  curY += rowsCount * 76 + 110;
+
+  // Заметка, если есть
+  if (src.notesVal) {
+    roundRectCanvas(ctx, 48, curY, width - 96, 92, 26);
+    ctx.fillStyle = '#fff8fa';
+    ctx.fill();
+    ctx.strokeStyle = '#f1dce7';
+    ctx.stroke();
+
+    ctx.fillStyle = '#a34e70';
+    ctx.font = '800 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    const noteLine = src.notesVal.length > 58 ? src.notesVal.slice(0, 58) + '…' : src.notesVal;
+    ctx.fillText(`📝 Заметка: ${noteLine}`, 80, curY + 54);
+    curY += 112;
+  }
+
+  // Подвал постера
+  ctx.fillStyle = '#8d6e7c';
+  ctx.font = '800 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('🐾 Сильнее с каждым подходом · Telegram Mini App «Умничка»', 60, height - 38);
+
+  lastGeneratedDataUrl = canvas.toDataURL('image/png');
+  lastGeneratedBlob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+  return { dataUrl: lastGeneratedDataUrl, blob: lastGeneratedBlob };
 }
 
 function copyTextToClipboard(text, silent = false) {
@@ -2429,41 +2780,201 @@ function fallbackCopy(text, silent = false) {
   document.body.removeChild(ta);
 }
 
-// Универсальная отправка отчёта в любой чат Telegram (работает даже при открытии из MenuButton без бэкенда)
-function shareWorkoutReportToTelegram() {
+// Открытие модального окна с визуальной карточкой отчёта
+async function openVisualReportModal() {
+  haptic('medium');
+  const modal = document.getElementById('visualReportModal');
+  const imgEl = document.getElementById('visualReportImg');
+  if (modal) modal.classList.add('show');
+  syncTelegramBackButton();
+
+  const { dataUrl } = await generateVisualReportCard();
+  if (imgEl && dataUrl) {
+    imgEl.src = dataUrl;
+  }
+}
+
+// Отправка текста отчёта напрямую в выбранный чат Telegram (с валидным URL, чтобы Telegram не блокировал вызов)
+function sendTextReportToTelegramChat() {
   haptic('success');
   const reportText = buildWorkoutReportText();
-  // Заодно копируем в буфер обмена на случай, если захочется просто вставить
   copyTextToClipboard(reportText, true);
 
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent('💪 Дневник «Умничка»')}&text=${encodeURIComponent('\n' + reportText)}`;
+  const validAppUrl = (window.location.href && window.location.href.startsWith('http'))
+    ? window.location.href.split('#')[0]
+    : 'https://lokiloop.github.io/umnichka/';
 
-  // 1. Если открыто внутри Telegram Mini App — вызываем нативное окно выбора чата Telegram
+  const telegramShareUrl = `https://t.me/share/url?url=${encodeURIComponent(validAppUrl)}&text=${encodeURIComponent('\n' + reportText)}`;
+
   if (tg && typeof tg.openTelegramLink === 'function') {
     try {
-      tg.openTelegramLink(shareUrl);
-      toast('Выбери чат для отправки отчёта ✈️');
+      tg.openTelegramLink(telegramShareUrl);
+      toast('Выбери чат в Telegram для отправки ✈️');
       return;
     } catch (e) {}
   }
 
-  // 2. Если поддерживается системное меню «Поделиться» (iOS / Android браузер)
-  if (navigator.share) {
-    navigator.share({
-      title: 'Тренировка · Умничка',
-      text: reportText
-    }).catch(() => {});
+  // Запасной глубокий линк клиентского приложения Telegram
+  const tgDeepLink = `tg://msg_url?url=${encodeURIComponent(validAppUrl)}&text=${encodeURIComponent('\n' + reportText)}`;
+  const win = window.open(telegramShareUrl, '_blank');
+  if (!win) {
+    window.location.href = tgDeepLink;
+  }
+}
+
+// Отправка самой графической картинки-постера через Web Share API (или скачивание)
+async function shareVisualCardImage() {
+  haptic('success');
+  const reportText = buildWorkoutReportText();
+  copyTextToClipboard(reportText, true);
+
+  if (!lastGeneratedBlob) {
+    await generateVisualReportCard();
+  }
+
+  if (lastGeneratedBlob && navigator.canShare) {
+    const file = new File([lastGeneratedBlob], `umnichka-${currentDate}.png`, { type: 'image/png' });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: 'Тренировка · Умничка 💕',
+          text: reportText
+        });
+        toast('Карточка отправлена! 💕');
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+      }
+    }
+  }
+
+  // Если встроенный WebView не поддерживает передачу файла напрямую — открываем выбор чата Telegram и скачиваем постер
+  downloadVisualCardImage();
+  sendTextReportToTelegramChat();
+}
+
+function downloadVisualCardImage() {
+  if (!lastGeneratedDataUrl) return;
+  const a = document.createElement('a');
+  a.href = lastGeneratedDataUrl;
+  a.download = `trenirovka-umnichka-${currentDate}.png`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  toast('Постер сохранён в телефон 📥');
+}
+
+// Завершение текущей тренировки, сохранение в историю дневника и сброс таймеров для новой тренировки
+function completeAndStartNewWorkout() {
+  if (isReadOnly()) {
+    haptic('warning');
+    toast('Включи редактирование дня или вернись к сегодня');
     return;
   }
 
-  // 3. Запасной вариант — открываем прямую ссылку шеринга Telegram
-  window.open(shareUrl, '_blank');
-  toast('Отчёт также скопирован в буфер обмена 📋');
+  const doneCount = exercises.reduce((n, e) => n + Array.from({ length: e.sets }, (_, i) => checked[e.id + '-' + i] ? 1 : 0).reduce((a, b) => a + b, 0), 0);
+  if (doneCount === 0) {
+    haptic('warning');
+    toast('Отметь хотя бы один подход перед завершением 💪');
+    return;
+  }
+
+  haptic('success');
+
+  // 1. Сохраняем завершённую сессию в архив текущего дня (history)
+  const notesEl = document.getElementById('notes');
+  const notesVal = notesEl ? notesEl.value.trim() : '';
+  const durationSec = Math.max(60, Math.floor((Date.now() - workoutStartedAt) / 1000));
+
+  const finishedRecord = {
+    finishedAt: Date.now(),
+    startedAt: workoutStartedAt,
+    durationSec,
+    doneSets: doneCount,
+    totalSets: total,
+    restCycles,
+    checked: { ...checked },
+    setDetails: JSON.parse(JSON.stringify(setDetails)),
+    notes: notesVal
+  };
+
+  const prevHistory = Array.isArray(session.history) ? session.history : [];
+  const updatedHistory = [...prevHistory, finishedRecord];
+  const completedCount = updatedHistory.length;
+
+  // 2. Останавливаем и сбрасываем таймер отдыха и секундомер тренировки
+  stopTimer(true);
+  workoutStartedAt = Date.now();
+  restCycles = 0;
+  const restCyclesEl = document.getElementById('restCycles');
+  if (restCyclesEl) restCyclesEl.textContent = pluralRest(0);
+
+  // 3. Очищаем рабочие галочки для новой тренировки (но сохраняем рабочие веса в истории для умной подстановки!)
+  checked = {};
+  if (notesEl) notesEl.value = '';
+
+  session = {
+    checked: {},
+    setDetails: JSON.parse(JSON.stringify(setDetails)),
+    notes: '',
+    restCycles: 0,
+    startedAt: workoutStartedAt,
+    history: updatedHistory,
+    completedCount,
+    updatedAt: Date.now()
+  };
+
+  book.days[currentDate] = session;
+  const jsonStr = JSON.stringify(book);
+  try {
+    localStorage.setItem(STORAGE_KEY, jsonStr);
+    if (tg && tg.CloudStorage && tg.CloudStorage.setItem) {
+      if (jsonStr.length <= 4000) {
+        tg.CloudStorage.setItem(STORAGE_KEY, jsonStr);
+      }
+    }
+  } catch (e) {}
+
+  render();
+  updateFloatingTime();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  toast(`🎉 Тренировка №${completedCount} сохранена в дневник! Таймеры сброшены для новой.`);
+
+  // Показываем красивый визуальный отчёт только что сохранённой тренировки
+  openVisualReportModal();
 }
 
-const copyReportBtn = document.getElementById('copyReportBtn');
-if (copyReportBtn) {
-  copyReportBtn.addEventListener('click', () => {
+const visualReportClose = document.getElementById('visualReportClose');
+if (visualReportClose) {
+  visualReportClose.addEventListener('click', () => {
+    document.getElementById('visualReportModal')?.classList.remove('show');
+    syncTelegramBackButton();
+  });
+}
+
+const visualReportModal = document.getElementById('visualReportModal');
+if (visualReportModal) {
+  visualReportModal.addEventListener('click', e => {
+    if (e.target.id === 'visualReportModal') {
+      visualReportModal.classList.remove('show');
+      syncTelegramBackButton();
+    }
+  });
+}
+
+const shareImageBtn = document.getElementById('shareImageBtn');
+if (shareImageBtn) shareImageBtn.addEventListener('click', shareVisualCardImage);
+
+const shareTelegramChatBtn = document.getElementById('shareTelegramChatBtn');
+if (shareTelegramChatBtn) shareTelegramChatBtn.addEventListener('click', sendTextReportToTelegramChat);
+
+const downloadReportImgBtn = document.getElementById('downloadReportImgBtn');
+if (downloadReportImgBtn) downloadReportImgBtn.addEventListener('click', downloadVisualCardImage);
+
+const copyReportModalBtn = document.getElementById('copyReportModalBtn');
+if (copyReportModalBtn) {
+  copyReportModalBtn.addEventListener('click', () => {
     haptic('light');
     copyTextToClipboard(buildWorkoutReportText());
   });
@@ -2479,56 +2990,67 @@ if (finishCopyBtn) {
 
 const sendReportBtn = document.getElementById('sendReportBtn');
 if (sendReportBtn) {
-  sendReportBtn.addEventListener('click', shareWorkoutReportToTelegram);
+  sendReportBtn.addEventListener('click', openVisualReportModal);
 }
 
 const shareAnytimeBtn = document.getElementById('shareAnytimeBtn');
 if (shareAnytimeBtn) {
-  shareAnytimeBtn.addEventListener('click', shareWorkoutReportToTelegram);
+  shareAnytimeBtn.addEventListener('click', openVisualReportModal);
+}
+
+const finishAndResetBtn = document.getElementById('finishAndResetBtn');
+if (finishAndResetBtn) {
+  finishAndResetBtn.addEventListener('click', completeAndStartNewWorkout);
+}
+
+const finishEarlyBtn = document.getElementById('finishEarlyBtn');
+if (finishEarlyBtn) {
+  finishEarlyBtn.addEventListener('click', completeAndStartNewWorkout);
 }
 
 function toast(msg) {
-  const t = document.getElementById('toast');
-  if (!t) return;
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(t._tm);
-  t._tm = setTimeout(() => t.classList.remove('show'), 2600);
+function stopTimer(silent = false) {
+  if (!silent) haptic('light');
+  clearInterval(timerInterval);
+  timerInterval = null;
+  timerEndTime = 0;
+  secondsLeft = 0;
+  try { localStorage.removeItem(REST_TIMER_KEY); } catch (e) {}
+  hideHudRestFinished();
+  const timerEl = document.getElementById('hudTimer');
+  if (timerEl) {
+    timerEl.textContent = '⏱ 00:00';
+    timerEl.classList.remove('active');
+  }
+  if (!silent) toast('Таймер отдыха остановлен');
 }
 
-function fmt(sec) {
-  sec = Math.max(0, Math.floor(sec));
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  if (m >= 60) {
-    const h = Math.floor(m / 60);
-    const remM = m % 60;
-    return `${h}ч ${String(remM).padStart(2, '0')}м`;
-  }
-  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
-}
+const rest60El = document.getElementById('rest60');
+if (rest60El) rest60El.addEventListener('click', () => startTimer(60));
 
-function updateFloatingTime() {
-  const now = new Date();
-  const clockNowEl = document.getElementById('clockNow');
-  if (clockNowEl) clockNowEl.textContent = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+const rest90El = document.getElementById('rest90');
+if (rest90El) rest90El.addEventListener('click', () => startTimer(90));
 
-  const elapsedEl = document.getElementById('elapsedTime');
-  if (elapsedEl) {
-    if (isViewingPast) {
-      elapsedEl.textContent = 'Архив';
-    } else {
-      const elapsedSec = (Date.now() - workoutStartedAt) / 1000;
-      elapsedEl.textContent = elapsedSec > 21600 ? 'В процессе' : fmt(elapsedSec);
+const restStopEl = document.getElementById('restStop');
+if (restStopEl) restStopEl.addEventListener('click', () => stopTimer(false));
+
+function scrollToNextSet() {
+  haptic('light');
+  const n = nextSet();
+  if (n) {
+    if (!isExpandedAll) {
+      const group = n.exercise.group;
+      const groupExercises = exercises.filter(e => e.group === group);
+      const idx = groupExercises.findIndex(e => e.id === n.exercise.id);
+      if (idx !== -1) carouselIndices[group] = idx;
+      render();
     }
-  }
-
-  if (!timerInterval && secondsLeft <= 0) {
-    const timerEl = document.getElementById('hudTimer');
-    if (timerEl && !timerEl.classList.contains('done-state')) {
-      timerEl.textContent = '⏱ 00:00';
-      timerEl.classList.remove('active');
-    }
+    const exTarget = document.getElementById('ex-' + n.exercise.id);
+    if (exTarget) exTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    toast(`${n.exercise.name} · подход ${n.index + 1} из ${n.exercise.sets}`);
+  } else {
+    // Все подходы выполнены — нажатие на «Готово 🎉» завершает тренировку, сохраняет её в дневник и сбрасывает таймеры для новой!
+    completeAndStartNewWorkout();
   }
 }
 
@@ -2816,7 +3338,16 @@ function percentFor(date) {
   if (!s) return 0;
   const c = s.checked || {};
   const doneCount = exercises.reduce((sum, e) => sum + Array.from({ length: e.sets }, (_, i) => c[e.id + '-' + i] ? 1 : 0).reduce((a, b) => a + b, 0), 0);
-  return Math.round(doneCount / total * 100);
+  const currentPct = Math.round(doneCount / total * 100);
+  if (currentPct > 0) return currentPct;
+
+  // Если текущая сессия была сброшена для новой тренировки, берём лучший результат из сохранённой истории этого дня
+  if (Array.isArray(s.history) && s.history.length > 0) {
+    const bestDone = Math.max(...s.history.map(h => Number(h.doneSets || 0)));
+    return Math.min(100, Math.round(bestDone / total * 100));
+  }
+  if (Number(s.completedCount) > 0) return 100;
+  return 0;
 }
 
 function renderWeekView() {
