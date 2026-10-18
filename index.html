@@ -1262,7 +1262,10 @@ textarea {
       <div class="tg-avatar" id="tgAvatar">Т</div>
       <span id="tgUserName">Танечка · Telegram Mini App</span>
     </div>
-    <span class="tg-cloud-pill" id="tgCloudStatus">☁️ Облако активно</span>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span class="tg-cloud-pill" id="tgCloudStatus">☁️ Облако активно</span>
+      <button type="button" id="forceReloadBtn" title="Обновить версию приложения" style="border:1px solid #dcd2fa;background:#f5f2ff;color:#6558a5;border-radius:99px;padding:3px 8px;font-size:11px;font-weight:800;">↻</button>
+    </div>
   </div>
 
   <header class="hero">
@@ -1476,11 +1479,33 @@ textarea {
     <div id="calendarContent"></div>
     <div id="analysisContent"></div>
     <div class="progress-footer">
-      <button type="button" id="exportProgress">📥 Скачать дневник</button>
+      <button type="button" id="exportProgress">📥 Сохранить / Копировать</button>
       <button type="button" id="importProgress">📤 Загрузить дневник</button>
       <input type="file" id="importFile" accept=".json,application/json" style="display:none">
     </div>
   </section>
+</div>
+
+<!-- Безопасное модальное окно резервного копирования и восстановления для Telegram WebView -->
+<div class="rest-modal" id="backupModal" role="dialog" aria-modal="true" aria-labelledby="backupModalTitle" style="z-index: 35;">
+  <div class="rest-dialog" style="width: min(100%, 420px);">
+    <button class="rest-close" id="backupClose" type="button" aria-label="Закрыть">×</button>
+    <div class="eyebrow">РЕЗЕРВНАЯ КОПИЯ ДНЕВНИКА</div>
+    <h2 id="backupModalTitle" style="margin:6px 0;">Сохранение данных 💾</h2>
+    <p id="backupModalDesc" style="font-size:12px;margin-bottom:10px;">Внутри Telegram удобнее всего переслать файл себе в «Избранное» или скопировать код дневника ниже:</p>
+    <textarea id="backupJsonArea" style="width:100%;height:110px;font-family:monospace;font-size:11px;border:1px solid var(--line);border-radius:12px;padding:10px;background:#fbf7f3;margin-bottom:12px;resize:none;" readonly></textarea>
+    <div class="rest-actions-col" id="backupExportActions">
+      <button class="rest-continue" id="backupShareFileBtn" type="button" style="background:linear-gradient(135deg, #d66b94, #6558a5);">📲 Поделиться файлом (.json)</button>
+      <button class="rest-continue" id="backupCopyBtn" type="button" style="background:#302a31;">📋 Скопировать код дневника</button>
+      <button class="rest-secondary" id="backupDownloadBrowserBtn" type="button">📥 Скачать через браузер</button>
+      <button class="rest-secondary" id="backupCancelBtn" type="button">← Вернуться назад</button>
+    </div>
+    <div class="rest-actions-col" id="backupImportActions" style="display:none;">
+      <button class="rest-continue" id="backupApplyTextBtn" type="button" style="background:#4c9b79;">✓ Восстановить из вставленного текста</button>
+      <button class="rest-continue" id="backupChooseFileBtn" type="button" style="background:#302a31;">📁 Выбрать файл .json с устройства</button>
+      <button class="rest-secondary" id="backupImportCancelBtn" type="button">← Вернуться назад</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1541,6 +1566,7 @@ const telegramId = tgUser?.id ? String(tgUser.id) : 'guest';
   const nameEl = document.getElementById('tgUserName');
   const avatarEl = document.getElementById('tgAvatar');
   const statusEl = document.getElementById('tgCloudStatus');
+  const reloadBtn = document.getElementById('forceReloadBtn');
   if (tgUser && nameEl) {
     const firstName = tgUser.first_name || 'Танечка';
     nameEl.textContent = `${firstName} ${tgUser.last_name || ''}`.trim() + ' · Mini App';
@@ -1549,7 +1575,22 @@ const telegramId = tgUser?.id ? String(tgUser.id) : 'guest';
   if (statusEl) {
     statusEl.textContent = (tg && tg.CloudStorage) ? '☁️ TG Cloud синхр.' : '💾 Локальный режим';
   }
+  if (reloadBtn) {
+    reloadBtn.addEventListener('click', () => {
+      const baseUrl = window.location.href.split('?')[0].split('#')[0];
+      window.location.replace(baseUrl + '?v=' + Date.now());
+    });
+  }
 })();
+
+// Безопасная запись в Telegram CloudStorage (обязательно с callback-функцией, чтобы Telegram WebView не выбрасывал ошибку)
+function safeCloudSet(key, valStr) {
+  try {
+    if (tg && tg.CloudStorage && typeof tg.CloudStorage.setItem === 'function') {
+      tg.CloudStorage.setItem(key, valStr, function() {});
+    }
+  } catch (e) {}
+}
 
 const tanyaGreetings = [
   'ПРИВЕТ, ТАНЕЧКА 💕 · FULL BODY',
@@ -1676,13 +1717,13 @@ const groupCounts = {
 };
 
 function mergeDayRecords(localDay, incomingDay) {
-  if (!localDay) return incomingDay;
-  if (!incomingDay) return localDay;
+  if (!localDay || typeof localDay !== 'object') return incomingDay || {};
+  if (!incomingDay || typeof incomingDay !== 'object') return localDay || {};
   const localTime = Number(localDay.updatedAt || 0);
   const incomingTime = Number(incomingDay.updatedAt || 0);
-  const history = (incomingDay.history?.length >= (localDay.history?.length || 0))
-    ? (incomingDay.history || [])
-    : (localDay.history || []);
+  const localHist = Array.isArray(localDay.history) ? localDay.history : [];
+  const incHist = Array.isArray(incomingDay.history) ? incomingDay.history : [];
+  const history = (incHist.length >= localHist.length) ? incHist : localHist;
   const completedCount = Math.max(Number(localDay.completedCount || 0), Number(incomingDay.completedCount || 0), history.length);
   if (incomingTime > localTime) return { ...incomingDay, history, completedCount };
   if (localTime > incomingTime) return { ...localDay, history, completedCount };
@@ -1701,9 +1742,10 @@ function mergeDayRecords(localDay, incomingDay) {
 }
 
 function mergeCloudBook(cloudBook) {
-  if (!cloudBook || typeof cloudBook !== 'object' || !cloudBook.days) return false;
+  if (!cloudBook || typeof cloudBook !== 'object' || !cloudBook.days || typeof cloudBook.days !== 'object') return false;
   let changed = false;
   for (const [dKey, cloudDay] of Object.entries(cloudBook.days)) {
+    if (!cloudDay || typeof cloudDay !== 'object') continue;
     const localDay = book.days[dKey];
     const mergedDay = mergeDayRecords(localDay, cloudDay);
     if (JSON.stringify(mergedDay) !== JSON.stringify(localDay)) {
@@ -1718,11 +1760,11 @@ function mergeCloudBook(cloudBook) {
   return changed;
 }
 
-if (tg && tg.CloudStorage && tg.CloudStorage.getItem) {
+if (tg && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function') {
   try {
     const syncBadge = document.getElementById('syncBadge');
     if (syncBadge) syncBadge.classList.add('show');
-    tg.CloudStorage.getItem(STORAGE_KEY, (err, val) => {
+    tg.CloudStorage.getItem(STORAGE_KEY, function(err, val) {
       if (syncBadge) syncBadge.classList.remove('show');
       if (!err && val) {
         try {
@@ -1741,6 +1783,7 @@ if (tg && tg.CloudStorage && tg.CloudStorage.getItem) {
 function syncTelegramBackButton() {
   if (!tg || !tg.BackButton) return;
   const anyModalOpen =
+    document.getElementById('backupModal')?.classList.contains('show') ||
     document.getElementById('pickerModal')?.classList.contains('show') ||
     document.getElementById('braidModal')?.classList.contains('show') ||
     document.getElementById('confirmModal')?.classList.contains('show') ||
@@ -1761,7 +1804,9 @@ if (tg && tg.BackButton) {
   try {
     tg.BackButton.onClick(() => {
       haptic('light');
-      if (document.getElementById('pickerModal')?.classList.contains('show')) {
+      if (document.getElementById('backupModal')?.classList.contains('show')) {
+        document.getElementById('backupModal')?.classList.remove('show');
+      } else if (document.getElementById('pickerModal')?.classList.contains('show')) {
         closePicker();
       } else if (document.getElementById('braidModal')?.classList.contains('show')) {
         closeBraidModal();
@@ -1862,15 +1907,13 @@ function persist() {
   const jsonStr = JSON.stringify(book);
   try {
     localStorage.setItem(STORAGE_KEY, jsonStr);
-    if (tg && tg.CloudStorage && tg.CloudStorage.setItem) {
-      if (jsonStr.length <= 4000) {
-        tg.CloudStorage.setItem(STORAGE_KEY, jsonStr);
-      } else {
-        const recentDays = Object.keys(book.days).sort().slice(-12);
-        const slimBook = { programStart: book.programStart, days: {} };
-        recentDays.forEach(k => { slimBook.days[k] = book.days[k]; });
-        tg.CloudStorage.setItem(STORAGE_KEY, JSON.stringify(slimBook));
-      }
+    if (jsonStr.length <= 4000) {
+      safeCloudSet(STORAGE_KEY, jsonStr);
+    } else {
+      const recentDays = Object.keys(book.days).sort().slice(-12);
+      const slimBook = { programStart: book.programStart, days: {} };
+      recentDays.forEach(k => { slimBook.days[k] = book.days[k]; });
+      safeCloudSet(STORAGE_KEY, JSON.stringify(slimBook));
     }
   } catch (e) {}
 }
@@ -2935,10 +2978,13 @@ function completeAndStartNewWorkout() {
   const jsonStr = JSON.stringify(book);
   try {
     localStorage.setItem(STORAGE_KEY, jsonStr);
-    if (tg && tg.CloudStorage && tg.CloudStorage.setItem) {
-      if (jsonStr.length <= 4000) {
-        tg.CloudStorage.setItem(STORAGE_KEY, jsonStr);
-      }
+    if (jsonStr.length <= 4000) {
+      safeCloudSet(STORAGE_KEY, jsonStr);
+    } else {
+      const recentDays = Object.keys(book.days).sort().slice(-12);
+      const slimBook = { programStart: book.programStart, days: {} };
+      recentDays.forEach(k => { slimBook.days[k] = book.days[k]; });
+      safeCloudSet(STORAGE_KEY, JSON.stringify(slimBook));
     }
   } catch (e) {}
 
@@ -3305,7 +3351,7 @@ if (confirmYesEl) {
     const jsonStr = JSON.stringify(book);
     try {
       localStorage.setItem(STORAGE_KEY, jsonStr);
-      if (tg && tg.CloudStorage && tg.CloudStorage.setItem) tg.CloudStorage.setItem(STORAGE_KEY, jsonStr);
+      safeCloudSet(STORAGE_KEY, jsonStr);
     } catch (e) {}
 
     render();
@@ -3632,25 +3678,200 @@ document.querySelectorAll('[data-period]').forEach(b => {
   });
 });
 
+// Утилита применения импортированных данных дневника
+function applyImportedBookData(rawJsonStr) {
+  try {
+    const data = JSON.parse(rawJsonStr);
+    if (!data || typeof data !== 'object' || !data.days || typeof data.days !== 'object') {
+      haptic('error');
+      toast('Данные не похожи на дневник тренировок');
+      return false;
+    }
+    for (const [dKey, importedDay] of Object.entries(data.days)) {
+      book.days[dKey] = mergeDayRecords(book.days[dKey], importedDay);
+    }
+    if (data.programStart && (!book.programStart || data.programStart < book.programStart)) {
+      book.programStart = data.programStart;
+    }
+    const jsonStr = JSON.stringify(book);
+    localStorage.setItem(STORAGE_KEY, jsonStr);
+    safeCloudSet(STORAGE_KEY, jsonStr);
+
+    loadDay(currentDate);
+    renderCalendar();
+    haptic('success');
+    toast('Дневник успешно загружен ✓');
+    return true;
+  } catch (err) {
+    haptic('error');
+    toast('Не удалось прочитать JSON-код дневника');
+    return false;
+  }
+}
+
+function closeBackupModal() {
+  const modal = document.getElementById('backupModal');
+  if (modal) modal.classList.remove('show');
+  syncTelegramBackButton();
+}
+
+const backupCloseEl = document.getElementById('backupClose');
+if (backupCloseEl) backupCloseEl.addEventListener('click', closeBackupModal);
+
+const backupCancelBtn = document.getElementById('backupCancelBtn');
+if (backupCancelBtn) backupCancelBtn.addEventListener('click', closeBackupModal);
+
+const backupImportCancelBtn = document.getElementById('backupImportCancelBtn');
+if (backupImportCancelBtn) backupImportCancelBtn.addEventListener('click', closeBackupModal);
+
+const backupModalEl = document.getElementById('backupModal');
+if (backupModalEl) {
+  backupModalEl.addEventListener('click', e => {
+    if (e.target.id === 'backupModal') closeBackupModal();
+  });
+}
+
+// Открытие безопасного окна сохранения дневника (без зависания WebView Telegram)
 const exportProgressEl = document.getElementById('exportProgress');
 if (exportProgressEl) {
   exportProgressEl.addEventListener('click', () => {
     haptic('light');
     persist();
-    const blob = new Blob([JSON.stringify(book, null, 2)], { type: 'application/json' });
+    const jsonPretty = JSON.stringify(book, null, 2);
+    const area = document.getElementById('backupJsonArea');
+    const title = document.getElementById('backupModalTitle');
+    const desc = document.getElementById('backupModalDesc');
+    const expActions = document.getElementById('backupExportActions');
+    const impActions = document.getElementById('backupImportActions');
+
+    if (title) title.textContent = 'Сохранить дневник 📥';
+    if (desc) desc.textContent = 'Нажми «Поделиться файлом», чтобы отправить резервную копию в Избранное Telegram или сохранить в Файлы, либо просто скопируй текст:';
+    if (area) {
+      area.readOnly = true;
+      area.value = jsonPretty;
+    }
+    if (expActions) expActions.style.display = 'flex';
+    if (impActions) impActions.style.display = 'none';
+
+    const modal = document.getElementById('backupModal');
+    if (modal) modal.classList.add('show');
+    syncTelegramBackButton();
+  });
+}
+
+// Кнопка «Поделиться файлом (.json)» через системное меню телефона
+const backupShareFileBtn = document.getElementById('backupShareFileBtn');
+if (backupShareFileBtn) {
+  backupShareFileBtn.addEventListener('click', async () => {
+    haptic('medium');
+    persist();
+    const jsonPretty = JSON.stringify(book, null, 2);
+    const fileName = `dnevnik-umnichka-${sessionTodayKey}.json`;
+
+    try {
+      const blob = new Blob([jsonPretty], { type: 'application/json' });
+      const file = new File([blob], fileName, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Дневник тренировок · Умничка',
+          text: `Резервная копия дневника тренировок (${sessionTodayKey})`
+        });
+        toast('Файл дневника отправлен ✓');
+        return;
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+    }
+
+    // Если передача файла не поддерживается устройством — копируем в буфер обмена
+    copyTextToClipboard(jsonPretty, true);
+    toast('Код дневника скопирован в буфер обмена 📋');
+  });
+}
+
+// Кнопка копирования JSON-кода дневника
+const backupCopyBtn = document.getElementById('backupCopyBtn');
+if (backupCopyBtn) {
+  backupCopyBtn.addEventListener('click', () => {
+    haptic('success');
+    const area = document.getElementById('backupJsonArea');
+    const text = area ? area.value : JSON.stringify(book, null, 2);
+    copyTextToClipboard(text, true);
+    toast('Код дневника скопирован! Вставь его в Заметки или Избранное 📋');
+  });
+}
+
+// Скачивание для обычного браузера (на ПК или вне Telegram WebView)
+const backupDownloadBrowserBtn = document.getElementById('backupDownloadBrowserBtn');
+if (backupDownloadBrowserBtn) {
+  backupDownloadBrowserBtn.addEventListener('click', () => {
+    haptic('light');
+    const jsonPretty = JSON.stringify(book, null, 2);
+    if (isTelegram) {
+      copyTextToClipboard(jsonPretty, true);
+      toast('В Telegram код скопирован в буфер обмена 📋 (чтобы не закрывать экран)');
+      return;
+    }
+    const blob = new Blob([jsonPretty], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `dnevnik-trenirovok-${sessionTodayKey}.json`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
     toast('Дневник сохранён в файл ✓');
   });
 }
 
+// Открытие окна импорта дневника (можно вставить текст или выбрать файл .json)
 const importProgressEl = document.getElementById('importProgress');
 if (importProgressEl) {
   importProgressEl.addEventListener('click', () => {
+    haptic('light');
+    const area = document.getElementById('backupJsonArea');
+    const title = document.getElementById('backupModalTitle');
+    const desc = document.getElementById('backupModalDesc');
+    const expActions = document.getElementById('backupExportActions');
+    const impActions = document.getElementById('backupImportActions');
+
+    if (title) title.textContent = 'Загрузить дневник 📤';
+    if (desc) desc.textContent = 'Вставь скопированный код дневника в поле ниже или выбери файл .json с телефона:';
+    if (area) {
+      area.readOnly = false;
+      area.value = '';
+      area.placeholder = 'Вставь сюда скопированный JSON-код дневника...';
+    }
+    if (expActions) expActions.style.display = 'none';
+    if (impActions) impActions.style.display = 'flex';
+
+    const modal = document.getElementById('backupModal');
+    if (modal) modal.classList.add('show');
+    syncTelegramBackButton();
+  });
+}
+
+const backupApplyTextBtn = document.getElementById('backupApplyTextBtn');
+if (backupApplyTextBtn) {
+  backupApplyTextBtn.addEventListener('click', () => {
+    const area = document.getElementById('backupJsonArea');
+    const val = area ? area.value.trim() : '';
+    if (!val) {
+      haptic('warning');
+      toast('Сначала вставь текст резервной копии в поле выше');
+      return;
+    }
+    if (applyImportedBookData(val)) {
+      closeBackupModal();
+    }
+  });
+}
+
+const backupChooseFileBtn = document.getElementById('backupChooseFileBtn');
+if (backupChooseFileBtn) {
+  backupChooseFileBtn.addEventListener('click', () => {
     const importFileEl = document.getElementById('importFile');
     if (importFileEl) importFileEl.click();
   });
@@ -3663,28 +3884,8 @@ if (importFileEl) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
-      try {
-        const data = JSON.parse(ev.target.result);
-        if (!data || typeof data !== 'object' || !data.days || typeof data.days !== 'object') {
-          toast('Файл не похож на дневник тренировок');
-          return;
-        }
-        for (const [dayKey, importedDay] of Object.entries(data.days)) {
-          book.days[dayKey] = mergeDayRecords(book.days[dayKey], importedDay);
-        }
-        if (data.programStart && (!book.programStart || data.programStart < book.programStart)) {
-          book.programStart = data.programStart;
-        }
-        const jsonStr = JSON.stringify(book);
-        localStorage.setItem(STORAGE_KEY, jsonStr);
-        if (tg && tg.CloudStorage && tg.CloudStorage.setItem) tg.CloudStorage.setItem(STORAGE_KEY, jsonStr);
-
-        loadDay(currentDate);
-        renderCalendar();
-        haptic('success');
-        toast('Дневник успешно загружен ✓');
-      } catch (err) {
-        toast('Не удалось прочитать файл JSON');
+      if (applyImportedBookData(ev.target.result)) {
+        closeBackupModal();
       }
     };
     reader.readAsText(file);
