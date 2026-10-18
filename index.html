@@ -1819,6 +1819,12 @@ if (wishCardEl) {
     showWish();
     toast('Новое пожелание на тренировку ✨');
   });
+}
+
+function isReadOnly() {
+  return isViewingPast && !allowPastEdit;
+}
+
 function hasAnyData(checkedObj, detailsObj, notesStr, rests, historyArr) {
   const hasChecked = Object.values(checkedObj || {}).some(Boolean);
   const hasDetails = Object.values(detailsObj || {}).some(d => (d && (d.weight > 0 || d.reps > 0)));
@@ -3009,48 +3015,47 @@ if (finishEarlyBtn) {
 }
 
 function toast(msg) {
-function stopTimer(silent = false) {
-  if (!silent) haptic('light');
-  clearInterval(timerInterval);
-  timerInterval = null;
-  timerEndTime = 0;
-  secondsLeft = 0;
-  try { localStorage.removeItem(REST_TIMER_KEY); } catch (e) {}
-  hideHudRestFinished();
-  const timerEl = document.getElementById('hudTimer');
-  if (timerEl) {
-    timerEl.textContent = '⏱ 00:00';
-    timerEl.classList.remove('active');
-  }
-  if (!silent) toast('Таймер отдыха остановлен');
+  const t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._tm);
+  t._tm = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
-const rest60El = document.getElementById('rest60');
-if (rest60El) rest60El.addEventListener('click', () => startTimer(60));
+function fmt(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    const remM = m % 60;
+    return `${h}ч ${String(remM).padStart(2, '0')}м`;
+  }
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
 
-const rest90El = document.getElementById('rest90');
-if (rest90El) rest90El.addEventListener('click', () => startTimer(90));
+function updateFloatingTime() {
+  const now = new Date();
+  const clockNowEl = document.getElementById('clockNow');
+  if (clockNowEl) clockNowEl.textContent = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
-const restStopEl = document.getElementById('restStop');
-if (restStopEl) restStopEl.addEventListener('click', () => stopTimer(false));
-
-function scrollToNextSet() {
-  haptic('light');
-  const n = nextSet();
-  if (n) {
-    if (!isExpandedAll) {
-      const group = n.exercise.group;
-      const groupExercises = exercises.filter(e => e.group === group);
-      const idx = groupExercises.findIndex(e => e.id === n.exercise.id);
-      if (idx !== -1) carouselIndices[group] = idx;
-      render();
+  const elapsedEl = document.getElementById('elapsedTime');
+  if (elapsedEl) {
+    if (isViewingPast) {
+      elapsedEl.textContent = 'Архив';
+    } else {
+      const elapsedSec = (Date.now() - workoutStartedAt) / 1000;
+      elapsedEl.textContent = elapsedSec > 21600 ? 'В процессе' : fmt(elapsedSec);
     }
-    const exTarget = document.getElementById('ex-' + n.exercise.id);
-    if (exTarget) exTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    toast(`${n.exercise.name} · подход ${n.index + 1} из ${n.exercise.sets}`);
-  } else {
-    // Все подходы выполнены — нажатие на «Готово 🎉» завершает тренировку, сохраняет её в дневник и сбрасывает таймеры для новой!
-    completeAndStartNewWorkout();
+  }
+
+  if (!timerInterval && secondsLeft <= 0) {
+    const timerEl = document.getElementById('hudTimer');
+    if (timerEl && !timerEl.classList.contains('done-state')) {
+      timerEl.textContent = '⏱ 00:00';
+      timerEl.classList.remove('active');
+    }
   }
 }
 
@@ -3151,8 +3156,8 @@ function showTimer() {
   }
 }
 
-function stopTimer() {
-  haptic('light');
+function stopTimer(silent = false) {
+  if (!silent) haptic('light');
   clearInterval(timerInterval);
   timerInterval = null;
   timerEndTime = 0;
@@ -3164,7 +3169,7 @@ function stopTimer() {
     timerEl.textContent = '⏱ 00:00';
     timerEl.classList.remove('active');
   }
-  toast('Таймер отдыха остановлен');
+  if (!silent) toast('Таймер отдыха остановлен');
 }
 
 const rest60El = document.getElementById('rest60');
@@ -3174,7 +3179,7 @@ const rest90El = document.getElementById('rest90');
 if (rest90El) rest90El.addEventListener('click', () => startTimer(90));
 
 const restStopEl = document.getElementById('restStop');
-if (restStopEl) restStopEl.addEventListener('click', stopTimer);
+if (restStopEl) restStopEl.addEventListener('click', () => stopTimer(false));
 
 function scrollToNextSet() {
   haptic('light');
@@ -3191,8 +3196,7 @@ function scrollToNextSet() {
     if (exTarget) exTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
     toast(`${n.exercise.name} · подход ${n.index + 1} из ${n.exercise.sets}`);
   } else {
-    const finishEl = document.getElementById('finish');
-    if (finishEl) finishEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    completeAndStartNewWorkout();
   }
 }
 
@@ -3295,7 +3299,7 @@ if (confirmYesEl) {
     const rcEl = document.getElementById('restCycles');
     if (rcEl) rcEl.textContent = pluralRest(0);
     
-    stopTimer();
+    stopTimer(true);
 
     delete book.days[currentDate];
     const jsonStr = JSON.stringify(book);
