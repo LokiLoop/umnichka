@@ -674,8 +674,14 @@ textarea {
 .finish h2 { font-size: 30px; margin: 8px 0 5px; color: #a34e70; }
 .finish p { color: #766774; font-size: 14px; line-height: 1.5; margin: 0 auto 14px; max-width: 330px; }
 .finish .confetti { font-size: 21px; letter-spacing: 8px; }
-.finish-tg-btn {
+.finish-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
   margin-top: 14px;
+}
+.finish-tg-btn {
   border: 0;
   border-radius: 14px;
   padding: 13px 18px;
@@ -687,6 +693,18 @@ textarea {
   align-items: center;
   gap: 6px;
   box-shadow: 0 6px 18px rgba(101,88,165,.25);
+}
+.finish-copy-btn {
+  border: 1px solid #dcd2fa;
+  border-radius: 14px;
+  padding: 13px 16px;
+  background: #fff;
+  color: #554894;
+  font-weight: 800;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .rest-modal {
@@ -1284,12 +1302,16 @@ textarea {
     <h2>Умничка! 💗</h2>
     <p>Ты справилась! Каждый подход — это вклад в твою силу и уверенность. Отдыхай, ты заслужила! 🌷</p>
     <div class="confetti">🐾 💕 🐾</div>
-    <button type="button" class="finish-tg-btn" id="sendReportBtn">✈️ Отправить отчёт в Telegram</button>
+    <div class="finish-actions">
+      <button type="button" class="finish-tg-btn" id="sendReportBtn">✈️ Отправить отчёт в Telegram</button>
+      <button type="button" class="finish-copy-btn" id="finishCopyBtn">📋 Скопировать текст</button>
+    </div>
     <div id="finishAnalysis"></div>
   </section>
 
   <div class="danger-zone">
-    <button class="share-tg-btn" id="copyReportBtn" type="button">📋 Скопировать отчёт дня</button>
+    <button class="share-tg-btn" id="shareAnytimeBtn" type="button">✈️ Поделиться отчётом в TG</button>
+    <button class="share-tg-btn" id="copyReportBtn" type="button">📋 Скопировать отчёт</button>
     <button class="reset-day-btn" id="resetBtn" type="button">🧹 Очистить отметки за день</button>
   </div>
 </main>
@@ -1755,7 +1777,6 @@ function persist() {
   const jsonStr = JSON.stringify(book);
   try {
     localStorage.setItem(STORAGE_KEY, jsonStr);
-    // Telegram CloudStorage имеет лимит 4096 символов на 1 ключ: сохраняем компактно или последние дни, если книга разрослась
     if (tg && tg.CloudStorage && tg.CloudStorage.setItem) {
       if (jsonStr.length <= 4000) {
         tg.CloudStorage.setItem(STORAGE_KEY, jsonStr);
@@ -2354,7 +2375,12 @@ function update() {
 function buildWorkoutReportText() {
   const done = exercises.reduce((n, e) => n + Array.from({ length: e.sets }, (_, i) => checked[e.id + '-' + i] ? 1 : 0).reduce((a, b) => a + b, 0), 0);
   const pct = Math.round(done / total * 100);
-  const lines = [`💗 Тренировка Умнички (${currentDate})`, `Выполнено: ${done}/${total} подходов (${pct}%)`, `Отдыхов: ${restCycles}`, ''];
+  const lines = [
+    `💗 Тренировка Умнички (${currentDate})`,
+    `✅ Выполнено: ${done}/${total} подходов (${pct}%)`,
+    `⏱ Отдыхов: ${restCycles}`,
+    ''
+  ];
 
   exercises.forEach(e => {
     const setsArr = [];
@@ -2377,7 +2403,17 @@ function buildWorkoutReportText() {
   return lines.join('\n');
 }
 
-function copyTextFallback(text) {
+function copyTextToClipboard(text, silent = false) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      if (!silent) toast('Отчёт скопирован в буфер обмена 📋');
+    }).catch(() => fallbackCopy(text, silent));
+  } else {
+    fallbackCopy(text, silent);
+  }
+}
+
+function fallbackCopy(text, silent = false) {
   const ta = document.createElement('textarea');
   ta.value = text;
   ta.style.position = 'fixed';
@@ -2386,39 +2422,69 @@ function copyTextFallback(text) {
   ta.select();
   try {
     document.execCommand('copy');
-    toast('Отчёт скопирован в буфер обмена 📋');
+    if (!silent) toast('Отчёт скопирован в буфер обмена 📋');
   } catch (e) {
-    toast('Не удалось скопировать отчёт');
+    if (!silent) toast('Не удалось скопировать отчёт');
   }
   document.body.removeChild(ta);
+}
+
+// Универсальная отправка отчёта в любой чат Telegram (работает даже при открытии из MenuButton без бэкенда)
+function shareWorkoutReportToTelegram() {
+  haptic('success');
+  const reportText = buildWorkoutReportText();
+  // Заодно копируем в буфер обмена на случай, если захочется просто вставить
+  copyTextToClipboard(reportText, true);
+
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent('💪 Дневник «Умничка»')}&text=${encodeURIComponent('\n' + reportText)}`;
+
+  // 1. Если открыто внутри Telegram Mini App — вызываем нативное окно выбора чата Telegram
+  if (tg && typeof tg.openTelegramLink === 'function') {
+    try {
+      tg.openTelegramLink(shareUrl);
+      toast('Выбери чат для отправки отчёта ✈️');
+      return;
+    } catch (e) {}
+  }
+
+  // 2. Если поддерживается системное меню «Поделиться» (iOS / Android браузер)
+  if (navigator.share) {
+    navigator.share({
+      title: 'Тренировка · Умничка',
+      text: reportText
+    }).catch(() => {});
+    return;
+  }
+
+  // 3. Запасной вариант — открываем прямую ссылку шеринга Telegram
+  window.open(shareUrl, '_blank');
+  toast('Отчёт также скопирован в буфер обмена 📋');
 }
 
 const copyReportBtn = document.getElementById('copyReportBtn');
 if (copyReportBtn) {
   copyReportBtn.addEventListener('click', () => {
     haptic('light');
-    copyTextFallback(buildWorkoutReportText());
+    copyTextToClipboard(buildWorkoutReportText());
+  });
+}
+
+const finishCopyBtn = document.getElementById('finishCopyBtn');
+if (finishCopyBtn) {
+  finishCopyBtn.addEventListener('click', () => {
+    haptic('light');
+    copyTextToClipboard(buildWorkoutReportText());
   });
 }
 
 const sendReportBtn = document.getElementById('sendReportBtn');
 if (sendReportBtn) {
-  sendReportBtn.addEventListener('click', () => {
-    haptic('success');
-    const reportText = buildWorkoutReportText();
-    // Если открыто через KeyboardButton WebApp в Telegram, можно отправить данные боту
-    if (tg && tg.sendData && isTelegram) {
-      try {
-        tg.sendData(JSON.stringify({
-          type: 'workout_report',
-          date: currentDate,
-          summary: reportText
-        }));
-        return;
-      } catch (e) {}
-    }
-    copyTextFallback(reportText);
-  });
+  sendReportBtn.addEventListener('click', shareWorkoutReportToTelegram);
+}
+
+const shareAnytimeBtn = document.getElementById('shareAnytimeBtn');
+if (shareAnytimeBtn) {
+  shareAnytimeBtn.addEventListener('click', shareWorkoutReportToTelegram);
 }
 
 function toast(msg) {
