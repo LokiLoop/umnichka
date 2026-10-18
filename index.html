@@ -3009,14 +3009,6 @@ if (finishEarlyBtn) {
 }
 
 function toast(msg) {
-  const el = document.getElementById('toast');
-  if (!el) return;
-  el.textContent = String(msg);
-  el.classList.add('show');
-  clearTimeout(toast._timeout);
-  toast._timeout = setTimeout(() => el.classList.remove('show'), 2400);
-}
-
 function stopTimer(silent = false) {
   if (!silent) haptic('light');
   clearInterval(timerInterval);
@@ -3156,6 +3148,51 @@ function showTimer() {
   if (timerEl) {
     timerEl.textContent = '⏱ ' + fmt(secondsLeft);
     timerEl.classList.add('active');
+  }
+}
+
+function stopTimer() {
+  haptic('light');
+  clearInterval(timerInterval);
+  timerInterval = null;
+  timerEndTime = 0;
+  secondsLeft = 0;
+  try { localStorage.removeItem(REST_TIMER_KEY); } catch (e) {}
+  hideHudRestFinished();
+  const timerEl = document.getElementById('hudTimer');
+  if (timerEl) {
+    timerEl.textContent = '⏱ 00:00';
+    timerEl.classList.remove('active');
+  }
+  toast('Таймер отдыха остановлен');
+}
+
+const rest60El = document.getElementById('rest60');
+if (rest60El) rest60El.addEventListener('click', () => startTimer(60));
+
+const rest90El = document.getElementById('rest90');
+if (rest90El) rest90El.addEventListener('click', () => startTimer(90));
+
+const restStopEl = document.getElementById('restStop');
+if (restStopEl) restStopEl.addEventListener('click', stopTimer);
+
+function scrollToNextSet() {
+  haptic('light');
+  const n = nextSet();
+  if (n) {
+    if (!isExpandedAll) {
+      const group = n.exercise.group;
+      const groupExercises = exercises.filter(e => e.group === group);
+      const idx = groupExercises.findIndex(e => e.id === n.exercise.id);
+      if (idx !== -1) carouselIndices[group] = idx;
+      render();
+    }
+    const exTarget = document.getElementById('ex-' + n.exercise.id);
+    if (exTarget) exTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    toast(`${n.exercise.name} · подход ${n.index + 1} из ${n.exercise.sets}`);
+  } else {
+    const finishEl = document.getElementById('finish');
+    if (finishEl) finishEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }
 
@@ -3652,8 +3689,6 @@ if (importFileEl) {
 }
 
 render();
-
-}
 </script>
 </body>
 </html>
